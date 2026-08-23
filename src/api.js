@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || "https://chat-application-l7do.onrender.com";
 export const WS_URL = API_URL.replace(/^http/, "ws") + "/ws/connect";
 
 async function request(path, options = {}) {
