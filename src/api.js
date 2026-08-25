@@ -1,25 +1,43 @@
-const API_URL = import.meta.env.VITE_API_URL || "https://chat-application-l7do.onrender.com";
-export const WS_URL = API_URL.replace(/^http/, "ws") + "/ws/connect";
+const API_BASE = import.meta.env.VITE_API_URL;
+export const WS_BASE = import.meta.env.VITE_WS_URL;
 
-async function request(path, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, {
-    credentials: "include",
-    headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers },
-    ...options,
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || data.message || "Request failed");
-  return data;
+export async function apiRequest(endpoint, options = {}) {
+  const url = `${API_BASE}${endpoint}`;
+  const defaultOptions = {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  };
+
+  const finalOptions = { ...defaultOptions, ...options };
+  if (options.headers) {
+    finalOptions.headers = { ...defaultOptions.headers, ...options.headers };
+  }
+
+  try {
+    const response = await fetch(url, finalOptions);
+    const data = await response.json().catch(() => ({}));
+    
+    if (!response.ok) {
+      const errorMsg = data.detail || data.message || `Request failed (${response.status})`;
+      throw new Error(errorMsg);
+    }
+    return data;
+  } catch (err) {
+    throw err;
+  }
 }
 
 export const api = {
-  signUp: (email, password) => request("/users/signup", { method: "POST", body: JSON.stringify({ email, password }) }),
-  login: (email, password) => request("/users/login", { method: "POST", body: JSON.stringify({ email, password }) }),
-  me: () => request("/users/me"),
-  refresh: () => request("/users/refresh", { method: "POST" }),
-  logout: () => request("/users/logout", { method: "POST" }),
-  contacts: () => request("/chat/contacts"),
-  messages: (username) => request(`/chat/${encodeURIComponent(username)}`),
-  sendMessage: (to, msg) => request("/chat/send-msg", { method: "POST", body: JSON.stringify({ to, msg }) }),
-  clearChat: (username) => request(`/chat/clear-chat/${encodeURIComponent(username)}`, { method: "DELETE" }),
+  me: () => apiRequest('/users/me'),
+  login: (email, password) => apiRequest('/users/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  signup: (email, password) => apiRequest('/users/signup', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  logout: () => apiRequest('/users/logout', { method: 'POST' }),
+  refresh: () => apiRequest('/users/refresh', { method: 'POST' }),
+  contacts: () => apiRequest('/chat/contacts'),
+  messages: (username) => apiRequest(`/chat/${encodeURIComponent(username)}`),
+  addContact: (username) => apiRequest(`/chat/${encodeURIComponent(username)}`, { method: 'POST' }),
+  sendMessage: (to, msg) => apiRequest('/chat/send-msg', { method: 'POST', body: JSON.stringify({ to, msg }) }),
+  clearChat: (username) => apiRequest(`/chat/clear-chat/${encodeURIComponent(username)}`, { method: 'DELETE' })
 };
