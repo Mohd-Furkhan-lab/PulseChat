@@ -1,7 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_URL;
 export const WS_BASE = import.meta.env.VITE_WS_URL;
 
-export async function apiRequest(endpoint, options = {}) {
+export async function apiRequest(endpoint, options = {}, isRetry = false) {
   const url = `${API_BASE}${endpoint}`;
   const defaultOptions = {
     credentials: 'include',
@@ -20,8 +20,19 @@ export async function apiRequest(endpoint, options = {}) {
     const data = await response.json().catch(() => ({}));
     
     if (!response.ok) {
+      if (response.status === 401 && !isRetry && !endpoint.includes('/users/login') && !endpoint.includes('/users/refresh') && !endpoint.includes('/users/signup')) {
+        try {
+          await apiRequest('/users/refresh', { method: 'POST' }, true);
+          return await apiRequest(endpoint, options, true);
+        } catch (refreshErr) {
+          // Fall through to throw original error if refresh fails
+        }
+      }
+
       const errorMsg = data.detail || data.message || `Request failed (${response.status})`;
-      throw new Error(errorMsg);
+      const err = new Error(errorMsg);
+      err.status = response.status;
+      throw err;
     }
     return data;
   } catch (err) {

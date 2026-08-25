@@ -867,6 +867,25 @@ body {
 .toast.error { border-left: 4px solid var(--danger); }
 .toast.info { border-left: 4px solid var(--accent-primary); }
 
+.toast.clickable {
+  cursor: pointer;
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+
+.toast.clickable:hover {
+  background: rgba(28, 40, 71, 0.98);
+  transform: translateY(-2px);
+}
+
+.toast-action {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  text-decoration: underline;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 3px; }

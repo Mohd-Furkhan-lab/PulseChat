@@ -18,12 +18,17 @@ function getAvatarGradient(name) {
 }
 
 // Toast System Component
-function ToastContainer({ toasts }) {
+function ToastContainer({ toasts, onToastClick }) {
   return (
     <div className="toast-container">
       {toasts.map(t => (
-        <div key={t.id} className={`toast ${t.type}`}>
+        <div 
+          key={t.id} 
+          className={`toast ${t.type} ${t.contact ? 'clickable' : ''}`}
+          onClick={() => t.contact && onToastClick && onToastClick(t.contact)}
+        >
           <span>{t.message}</span>
+          {t.contact && <span className="toast-action">Tap to open</span>}
         </div>
       ))}
     </div>
@@ -78,7 +83,7 @@ function AuthScreen({ onLoginSuccess, addToast }) {
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
             </svg>
           </div>
-          <h1 class="brand-title">PulseChat</h1>
+          <h1 className="brand-title">PulseChat</h1>
           <p className="brand-subtitle">React real-time messaging</p>
         </div>
 
@@ -134,7 +139,7 @@ function AuthScreen({ onLoginSuccess, addToast }) {
 }
 
 // Main Dashboard Component
-function ChatDashboard({ user, onLogout, addToast }) {
+function ChatDashboard({ user, onLogout, addToast, onRegisterSelectContact }) {
   const [contacts, setContacts] = useState([]);
   const [activeContact, setActiveContact] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -149,6 +154,17 @@ function ChatDashboard({ user, onLogout, addToast }) {
   const messagesEndRef = useRef(null);
   const activeContactRef = useRef(activeContact);
 
+  const selectContact = useCallback((name) => {
+    setActiveContact(name);
+    setMobileSidebarVisible(false);
+  }, []);
+
+  useEffect(() => {
+    if (onRegisterSelectContact) {
+      onRegisterSelectContact(selectContact);
+    }
+  }, [onRegisterSelectContact, selectContact]);
+
   useEffect(() => {
     activeContactRef.current = activeContact;
   }, [activeContact]);
@@ -157,9 +173,10 @@ function ChatDashboard({ user, onLogout, addToast }) {
   const loadContacts = useCallback(async () => {
     try {
       const res = await api.contacts();
-      setContacts(res.chats || []);
+      const chatList = Array.isArray(res.chats) ? res.chats : (Array.isArray(res) ? res : []);
+      setContacts(prev => Array.from(new Set([...chatList, ...prev])));
     } catch (err) {
-      setContacts([]);
+      // Retain locally stored contacts if backend returns error or 404
     }
   }, []);
 
@@ -224,6 +241,8 @@ function ChatDashboard({ user, onLogout, addToast }) {
         SoundFX.receive();
         const fromUser = data.from;
         
+        setContacts(prev => Array.from(new Set([fromUser, ...prev])));
+
         if (activeContactRef.current === fromUser) {
           setMessages(prev => [...prev, {
             sender: fromUser,
@@ -231,7 +250,7 @@ function ChatDashboard({ user, onLogout, addToast }) {
             created_at: new Date().toISOString()
           }]);
         } else {
-          addToast(`New message from ${fromUser}`, 'info');
+          addToast(`New message from ${fromUser}`, 'info', fromUser);
         }
         loadContacts();
       } catch (e) {}
@@ -272,11 +291,6 @@ function ChatDashboard({ user, onLogout, addToast }) {
     };
   }, [connectWS, loadContacts, loadMessages]);
 
-  const selectContact = (name) => {
-    setActiveContact(name);
-    setMobileSidebarVisible(false);
-  };
-
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!inputMsg.trim() || !activeContact) return;
@@ -305,23 +319,36 @@ function ChatDashboard({ user, onLogout, addToast }) {
 
   const handleAddContact = async (e) => {
     e.preventDefault();
-    if (!newContactName.trim()) return;
+    const name = newContactName.trim();
+    if (!name) return;
 
-    if (newContactName.trim() === user.user_name) {
+    if (user && user.user_name && name.toLowerCase() === user.user_name.toLowerCase()) {
       addToast('Cannot add yourself', 'error');
       return;
     }
 
     try {
-      const res = await api.addContact(newContactName.trim());
-      addToast(res.message || `Connected with ${newContactName}`, 'success');
+      const res = await api.addContact(name);
+      addToast(res.message || `Connected with ${name}`, 'success');
       setShowModal(false);
-      const name = newContactName.trim();
       setNewContactName('');
+      setSearchQuery('');
+      setContacts(prev => prev.includes(name) ? prev : [...prev, name]);
       await loadContacts();
       selectContact(name);
     } catch (err) {
-      addToast(err.message || 'Could not add contact', 'error');
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('already exists')) {
+        addToast(`Opening conversation with ${name}`, 'info');
+        setShowModal(false);
+        setNewContactName('');
+        setSearchQuery('');
+        setContacts(prev => prev.includes(name) ? prev : [...prev, name]);
+        await loadContacts();
+        selectContact(name);
+      } else {
+        addToast(msg || 'Could not add contact', 'error');
+      }
     }
   };
 
@@ -505,14 +532,21 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState([]);
+  const selectContactRef = useRef(null);
 
-  const addToast = useCallback((message, type = 'info') => {
+  const addToast = useCallback((message, type = 'info', contact = null) => {
     const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
+    setToasts(prev => [...prev, { id, message, type, contact }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4000);
   }, []);
+
+  const handleToastClick = (contact) => {
+    if (selectContactRef.current) {
+      selectContactRef.current(contact);
+    }
+  };
 
   useEffect(() => {
     async function checkAuth() {
@@ -552,13 +586,19 @@ export default function App() {
         <div className="glow-blob blob-3"></div>
       </div>
 
-      <ToastContainer toasts={toasts} />
+      <ToastContainer toasts={toasts} onToastClick={handleToastClick} />
 
       {!user ? (
         <AuthScreen onLoginSuccess={setUser} addToast={addToast} />
       ) : (
-        <ChatDashboard user={user} onLogout={handleLogout} addToast={addToast} />
+        <ChatDashboard 
+          user={user} 
+          onLogout={handleLogout} 
+          addToast={addToast} 
+          onRegisterSelectContact={(fn) => { selectContactRef.current = fn; }} 
+        />
       )}
     </div>
   );
 }
+
